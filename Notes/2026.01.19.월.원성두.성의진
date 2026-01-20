@@ -1,0 +1,801 @@
+안영환 브리핑
+
+첫번째 오류 inventory.ini에 정보가 없다 어느 호스트에 실행을 시킬건지-앤서블 명령 대상자 지정 필요
+
+두번째 오유 각각의 폴더 안에 템플릿/테스크/핸들러 3가지가 있는데 tasks/main.yml에서 핸들러가 같이 있음
+-> 이거 마리아 핸들러에 들어가야 하는 부분(디렉토리 만들고 핸들러에 넣어야 함) nginx도 동일하게 해결
+
+세번째 오류 데이터 베이스 관련 .sql을 찾을 수 없다는 에러가 날 것
+```
+#become: yes가 없으면 Root 권한이 없어 DB Import가 실패합니다
+```
+
+위는 target: /var/lib/mysql/backup/employees.sql 에서 employees.sql은 깃허브에서 지난 실습에서 다운받은 파일인데 홈디렉터리에 dbbackup 디렉토리를 만들고, 파일을 넣으면 dump파일을 찾을 수 없다는 에러가 남. 보낼 때 덤프 파일까지 한번에 보내줘야 하는데 해결하기 위해서 아까의 .sql을 지우고 이 폴더 전체를 보낸다고 수정해야하. 보낼 때와 받을 때 employees.sql이 아니라 employees 폴더 자체를 보내는 방식으로 해야 함. 디렉토리를 만들지 않고 이름만 dbbackup으로 변경해도 됨
+
+8080이 안되는 문제는 해당 포트에 접속하는 nginx 설정을 초기화 했음. nginx를 클린 삭제하고 클린 설치하니까 해결됐지만 팀장님은 이거 직접 끝까지 풀어보라고 했음
+
+1. vault는 yaml 파일 안에 패스워드를 암호화 해준다.(https://github.com/putto4u/03.Ansible.IaC.InfraAuto/blob/main/0050.%EB%B3%B5%EC%9E%A1%ED%95%9C%ED%94%8C%EB%A0%88%EC%9D%B4%EB%B6%81%20%EC%95%A4%EC%84%9C%EB%B8%94%20Vault/0010.%EB%B3%B5%EC%9E%A1%ED%95%9C%ED%94%8C%EB%A0%88%EC%9D%B4%EB%B6%81%EC%84%A4%EC%A0%95%EC%95%A4%EC%84%9C%EB%B8%94Vault%EA%B5%AC%ED%98%84.md)
+복잡한 Ansible 플레이북 설정을 구조화하는 방법과 Ansible Vault 구현 방법을 실무 예제를 중심으로 상세히 설명해 드리겠습니다. 이는 안전하고 확장 가능한 IaC(Infrastructure as Code)를 구축하는 데 필수적입니다.
+
+1. 복잡한 플레이북의 구조화 (모듈화) 🧱
+복잡한 인프라를 관리할 때는 플레이북을 모듈화하여 재사용성, 가독성, 유지보수성을 극대화해야 합니다. **Role(역할)**과 Include/Import가 핵심입니다.
+
+1.1. Role (역할)을 이용한 구조화 (표준)
+Role은 Ansible 프로젝트 구조의 기본이자 표준입니다. 특정 서버의 역할(예: 웹 서버, DB 서버)에 필요한 모든 설정(태스크, 변수, 템플릿 등)을 캡슐화합니다.
+
+Role 서브 디렉토리	포함 내용
+tasks/	서버에 실행할 실제 작업(main.yml에 태스크 목록 정의)
+vars/	Role 내에서 사용할 변수 (Role별 변수)
+defaults/	변수가 설정되지 않았을 때 사용할 기본값 (가장 낮은 우선순위)
+templates/	Jinja2 템플릿 파일 (.j2 확장자)
+handlers/	notify에 의해 호출되는 재시작 등 작업
+메인 플레이북 (site.yml)에서의 Role 사용:
+
+---
+# DB 서버 그룹에 mariadb Role 적용
+- name: Deploy Database Tier
+  hosts: dbservers
+  become: yes
+  roles:
+    - mariadb
+    - common_security # 모든 서버에 적용되는 보안 Role
+1.2. 변수(Variable)의 체계적 관리
+복잡한 환경일수록 변수는 중앙 집중식으로 분리 관리해야 합니다.
+
+group_vars/: 그룹(예: prod, dev, webservers)별 공통 설정 변수.
+예: group_vars/prod.yml 파일에 env_tag: production 정의.
+host_vars/: 개별 서버(예: web1, db2)에만 적용되는 고유 변수.
+예: host_vars/web1.yml 파일에 nginx_port: 8080 정의.
+1.3. 태스크 파일 모듈화 (Include/Import)
+Role 내에서 태스크가 너무 길어지면 이를 여러 파일로 분리합니다.
+
+사용 방법	설명	사용 예시
+include_tasks	동적으로 다른 태스크 파일을 포함. loop나 when과 함께 사용하여 실행 시점에 로직을 제어할 때 유용.	- include_tasks: "install_{{ item }}.yml" loop: [p1, p2]
+import_tasks	정적으로 다른 태스크 파일을 통합. 플레이북 구조를 명확하게 정의할 때 사용.	- import_tasks: setup_network.yml
+2. Ansible Vault 구현 방법 (보안) 🔒
+Ansible Vault는 비밀번호, 키, 인증서 등 민감 정보를 암호화하여 코드를 안전하게 보관할 수 있게 합니다.
+
+2.1. Vault 환경 준비
+Ansible Vault를 사용하려면 마스터 비밀번호를 설정해야 합니다.
+
+비밀번호 파일 생성 (권장): 보안상 마스터 비밀번호를 파일로 관리하고 이 파일을 Git에 올리지 않도록 합니다.
+
+# vault_pass.txt 파일을 생성하고 마스터 비밀번호를 입력
+echo "MySuperSecretVaultPass" > ~/.ansible/vault_pass.txt
+2.2. Vault 파일 생성 및 편집
+민감한 정보를 담을 변수 파일(secrets.yml)을 생성하거나 기존 파일을 편집합니다.
+
+작업	명령어	설명
+새 Vault 파일 생성	ansible-vault create group_vars/prod/secrets.yml	파일을 만들면서 즉시 암호화합니다.
+기존 파일 암호화	ansible-vault encrypt group_vars/prod/secrets.yml	일반 텍스트 파일을 암호화된 파일로 변환합니다.
+파일 내용 편집	ansible-vault edit group_vars/prod/secrets.yml	암호화된 파일을 복호화하여 편집하고 저장 시 다시 암호화합니다.
+암호화된 파일 내용 (YAML 형식):
+
+# group_vars/prod/secrets.yml 파일 (내부)
+db_root_password: ENC[AES256_GCM,....]
+aws_access_key: ENC[AES256_GCM,....]
+2.3. 플레이북에서 Vault 사용
+Vault 파일은 일반 변수 파일처럼 사용하면 됩니다. Ansible이 실행 시 자동으로 처리합니다.
+
+**group_vars/prod/secrets.yml**에 정의된 변수 사용 예시:
+
+- name: Configure database root password
+  community.mysql.mysql_user:
+    name: root
+    password: "{{ db_root_password }}" # Vault 파일의 변수명 그대로 사용
+    host: localhost
+    state: present
+2.4. 플레이북 실행 (패스워드 전달)
+플레이북을 실행할 때, Vault 패스워드를 Ansible에게 전달해야 합니다.
+
+# 옵션 1: 패스워드 파일 사용 (권장)
+ansible-playbook site.yml --vault-password-file ~/.ansible/vault_pass.txt
+
+# 옵션 2: 실행 시 수동 입력 (보안성이 낮음)
+ansible-playbook site.yml --ask-vault-pass
+Ansible Vault를 통해 민감한 정보를 안전하게 관리함으로써, 코드를 Git에 자유롭게 공유하면서도 보안 규정을 준수하는 전문적인 IaC 워크플로우를 구축할 수 있습니다.
+
+Ansible: 확장 가능한 대규모 인프라 구조 설계
+복잡한 인프라 환경에서 플레이북을 효율적으로 관리하려면 단순한 파일 나열이 아닌, **역할(Role)**과 **환경(Environment)**이 명확히 분리된 구조가 필요합니다. 이는 수백 대의 서버를 관리하더라도 코드의 재사용성을 극대화하고 실수를 방지하는 핵심 전략입니다.
+
+1. 실무 표준 디렉토리 구조 (Standard Layout)
+아래 구조는 수천 대 규모의 서버를 운영하는 실무 엔지니어들이 가장 선호하는 Best Practice 구조입니다.
+
+ansible-project/
+├── site.yml                 # 전체 인프라를 배포하는 마스터 플레이북
+├── webservers.yml           # 웹 서버 계층 전용 플레이북
+├── dbservers.yml            # 데이터베이스 계층 전용 플레이북
+├── inventory/               # 환경별 인벤토리 관리
+│   ├── production/
+│   │   ├── hosts            # 운영 환경 호스트 리스트
+│   │   └── group_vars/      # 운영 환경 전용 변수 (DB 접속 정보 등)
+│   └── staging/
+│       ├── hosts            # 스테이징 환경 호스트 리스트
+│       └── group_vars/      # 스테이징 환경 전용 변수
+├── roles/                   # 재사용 가능한 컴포넌트 (핵심)
+│   ├── common/              # 모든 서버 공통 설정 (NTP, 보안 설정 등)
+│   │   ├── tasks/main.yml
+│   │   ├── handlers/main.yml
+│   │   └── defaults/main.yml
+│   ├── nginx/               # Nginx 설치 및 설정 전용 역할
+│   │   ├── tasks/main.yml
+│   │   ├── templates/       # 설정 파일 템플릿 (*.j2)
+│   │   └── vars/main.yml
+│   └── mysql/               # MySQL 설치 및 설정 전용 역할
+├── library/                 # 커스텀 모듈 (필요 시)
+└── ansible.cfg              # Ansible 설정 파일
+
+2. 구조별 핵심 역할 상세
+2.1. 인벤토리 분리 (inventory/)
+운영(Production)과 개발(Staging) 환경을 디렉토리 수준에서 분리합니다. 이를 통해 실수로 운영 서버에 개발용 설정을 배포하는 사고를 방지할 수 있습니다.
+
+실행 예시: ansible-playbook -i inventory/production site.yml
+2.2. 변수 관리 우선순위 (group_vars/)
+group_vars/all.yml: 모든 서버에 적용되는 공통 변수 (예: 타임존, 관리자 계정)
+group_vars/webservers.yml: 웹 서버 그룹에만 적용되는 특정 설정
+2.3. Roles (컴포넌트화)
+각 역할은 독립적으로 동작하도록 설계합니다. 예를 들어 nginx Role은 어떤 프로젝트에서 가져다 써도 동작해야 합니다. 프로젝트 전용 변수는 Role 내부가 아닌 group_vars에서 주입받는 방식을 취합니다.
+
+3. Ansible Vault를 활용한 보안 구조화
+보안이 중요한 정보(DB 비밀번호, API 키 등)는 group_vars 내부의 secrets.yml 파일에 별도로 보관하며, 이 파일만 Vault로 암호화합니다.
+
+3.1. 보안 변수 분리 구조
+group_vars/
+└── production/
+    ├── vars.yml             # 일반 설정 (암호화 불필요)
+    └── secrets.yml          # 비밀번호 등 민감 정보 (ansible-vault로 암호화)
+
+3.2. Vault 암호화 실행
+# 보안 파일 생성 (유료 전환 서비스 없음 - 로컬 암호화)
+ansible-vault create group_vars/production/secrets.yml
+
+# 기존 파일 암호화
+ansible-vault encrypt group_vars/production/secrets.yml
+
+3.3. 배포 자동화 시 활용
+CI/CD 파이프라인(Jenkins, GitHub Actions 등)에서 사용 시, 패스워드를 텍스트 파일로 저장하여 참조합니다.
+
+# vault_pass.txt 파일에 암호 저장 후 실행
+ansible-playbook -i inventory/production site.yml --vault-password-file .vault_pass
+
+-> 사이트 디렉토리랑 같아야 함 경로가 다르면 절대/상대 경로와 같아야 함 !!=> .vault_pass 실습에서는 제대로 고쳐서 넣어야 트러블 없이 실행 될 것!!
+4. AWS 인프라 관리 시 비용 주의사항
+Ansible을 사용하여 AWS 리소스를 동적으로 프로비저닝(EC2 생성 등)할 때 다음 사항을 유의하십시오.
+
+EC2 Instance (유료): amazon.aws.ec2_instance 모듈을 사용하여 인스턴스를 생성하면 즉시 시간당 과금이 시작됩니다. 테스트가 끝나면 반드시 state: absent로 삭제해야 합니다.
+EBS Volumes (유료): 인스턴스를 삭제해도 루트 볼륨 외의 추가 EBS는 남아서 과금될 수 있으니 주의가 필요합니다.
+Free Tier: t2.micro 또는 t3.micro 타입을 사용하고 있는지 플레이북의 instance_type 변수를 확인하십시오.
+Next Step: Ansible Role 생성 실습 및 템플릿 활용법
+
+개인 설정에 따라 깃허브 마크다운 포맷으로 작성되었습니다. 모든 AWS 관련 내용은 과금 유의사항을 포함하였으며, 불필요한 인사말은 생략하였습니다.
+
+디렉토리 구조 자동화 스크립트 | Role 기반 플레이북 작성 | Vault 자동 복호화 설정
+
+저의 답변이 도움되셨길 바랍니다. 추가로 궁금한 점이 있으시면 언제든 말씀해 주세요.
+
+2.
+앤서블(Ansible) 장애 처리 및 문제 해결 가이드
+앤서블은 에이전트가 없는(Agentless) 구조로 설계되어 관리가 편리하지만, 네트워크 통신이나 권한 설정, YAML 문법 오류 등으로 인해 실행 중 다양한 장애가 발생할 수 있습니다. 장애를 체계적으로 분석하고 해결하는 핵심 전략을 다룹니다.
+
+1. 로그 수준(Verbosity) 상향을 통한 디버깅
+앤서블 실행 시 오류 메시지가 불충분하다면 -v 옵션을 사용하여 출력되는 정보의 양을 늘릴 수 있습니다. *최소 3개 하기
+
+-v: 성공/실패 결과만 출력
+-vv: 설정 파일 및 모듈 정보 포함
+-vvv: (권장) SSH 연결 상세 프로세스(입출력 데이터) 포함
+-vvvv: SSH 연결 플러그인 레벨의 최상위 상세 정보 출력
+: 실행하고 에러 못 알아보겠을 때 한번 더 -vvv붙여서 실행해보세요
+
+ansible-playbook -i inventory.ini site.yml -vvv
+
+2. 주요 유형별 장애 원인 및 해결책
+앤서블 운영 중 가장 빈번하게 발생하는 3가지 장애 유형과 대응법입니다.
+
+① SSH 연결 및 인증 실패 (Unreachable)
+앤서블은 SSH 프로토콜을 기반으로 합니다. 대상 서버에 접속할 수 없는 경우 발생합니다.
+
+원인: SSH 키 등록 누락, known_hosts 미등록, 방화벽(22번 포트) 차단.
+해결: * ssh 사용자명@서버IP로 직접 접속이 되는지 확인합니다.
+ansible.cfg에서 host_key_checking = False를 설정하여 호스트 키 확인을 건너뜁니다.
+패스워드 인증 사용 시 -k (--ask-pass) 옵션을 추가합니다.
+② 권한 부족 (Permission Denied)
+대상 서버에서 명령을 실행할 권한이 없거나, 루트 권한(sudo) 승인이 실패한 경우입니다. :우리가 어떤 파일을 만들고, 파일 모드(ls -al로 볼 수 있음)을 바궈주지 않으면 읽을 수 없음. var 밑으로 root 영역이라서 들어 갈 수 없음. 이럴 때 root 체인지 명령이나 접근 명령을 넣어야 함 !항상 나는 누구인가를 알아야 함! yaml파일을 실행할 때 root 권한이 필요하면 become yes를 넣어줘야 함
+
+항상 !나는 누구인가! !여긴 어디인가!가 중요함. 어떤 권한이 필요한지 미리 예측하고 권한을 넣어줘야 하기 때문에! 어디서 권한을 줘야 할 지, 언제 어디서 줄 지를 잘 생각해야 함
+
+원인: become: yes 설정 누락, sudo 패스워드 미제공.
+해결:
+플레이북에 become: yes와 become_user: root가 명시되었는지 확인합니다.
+실행 시 -K (--ask-become-pass) 옵션을 사용하거나 ansible_become_password 변수를 설정합니다.
+③ YAML 문법 오류 (Syntax Error)
+플레이북의 들여쓰기나 형식이 잘못된 경우 실행 전 단계에서 멈춥니다.
+
+해결: 앤서블에서 제공하는 문법 체크 도구를 사용합니다.
+ansible-playbook --syntax-check site.yml
+
+3. 디버그(debug) 모듈을 이용한 변수 추적
+플레이북 중간에 특정 변수의 값이나 시스템 상태를 출력하여 논리 오류를 찾을 수 있습니다.
+
+- name: 변수 상태 확인
+  debug:
+    msg: "현재 설치된 패키지 버전은 {{ package_version }} 입니다."
+
+- name: 모든 팩트(Facts) 정보 출력
+  debug:
+    var: ansible_facts
+
+4. 앤서블 린트(ansible-lint) 활용
+문법적 오류뿐만 아니라 모범 사례(Best Practices)를 위반했는지 점검해 주는 도구입니다. 복잡한 인프라를 관리할 때 필수적입니다.
+
+# 설치
+pip install ansible-lint
+
+# 점검 실행
+ansible-lint site.yml
+
+5. AWS 환경 운영 시 장애 포인트 및 비용 주의사항
+AWS EC2 인스턴스를 관리 대상으로 할 때 발생하는 특유의 장애 요소입니다.
+
+장애 상황	원인 및 해결	과금/주의사항
+Connection Timeout	보안 그룹(Security Group)에서 22번 포트 미개방	보안 그룹 설정 변경은 무료이나, 오픈 시 IP 제한 필수
+Dynamic IP 변경	인스턴스 재시작으로 IP가 바뀌어 인벤토리가 무효화됨	Elastic IP(고정 IP) 할당 권장 (미사용 시 과금 주의)
+Gathering Facts 지연	인스턴스 사양이 낮아 시스템 정보 수집 시 부하 발생	gather_facts: no 설정 시 속도는 빨라지나 변수 사용 제약
+[!WARNING] 과금 주의: 앤서블로 수많은 인스턴스에 동시에 패키지 업데이트(yum update 등)를 실행할 경우, 대량의 데이터 전송이 발생하여 AWS Data Transfer Out 요금이 급증할 수 있습니다. 대규모 배포 시에는 리전 내 로컬 리포지토리를 사용하는 것이 경제적입니다.
+
+Next Step: 앤서블 전략적 최적화: 가용성 및 속도 개선 방법
+
+strategy: free를 이용한 병렬 실행 최적화
+ansible-vault를 이용한 민감 정보(비밀번호) 암호화 관리
+커스텀 팩트(Custom Facts) 생성 및 활용법
+나에게 하는 말: 앤서블 장애처리의 핵심인 로그 분석부터 자주 발생하는 오류 패턴, 그리고 AWS 환경에서의 실무적인 주의사항을 담아 교재 한 페이지 분량으로 정리했습니다. 깃허브 업로드가 용이하도록 마크다운 형식을 적용했습니다.
+
+Next Step: 앤서블 전략적 최적화: 가용성 및 속도 개선 방법
+
+
+[ ]
+
+코딩을 시작하거나 AI로 코드를 생성하세요.
+0010.앤서블프로젝트실습
+
+앤서블 실전 프로젝트: 온프레미스 환경을 위한 보안 웹/DB 구축
+본 프로젝트는 AWS와 같은 클라우드 방화벽에 의존하지 않고, 서버 자체의 설정만으로 보안을 강화하는 구성을 다룹니다.
+
+웹 서버 (Nginx): 8080번 포트를 통해 누구나 외부에서 접속 가능합니다. !외부에서 접속 할 때 8080으로 접속해야 함 포트 포워딩 안 할 건데 알고만 있기!
+
+데이터베이스 (MariaDB): 철저하게 **내부(Localhost)**에서만 접속을 허용합니다. !외부에서는 꼭 웹서버를 거쳐서 sql에서 가져오는 것 만 하는 것. mySQL을 훅킹한 게 MariaDB이기 때문에 상관없음 그냥 마리아로 해요
+
+Nginx (PHP): 같은 서버 내부의 로컬 통신으로 DB에 접속합니다. !왓슨 서버 하다 더 만들면 복잡해지니까 웹서버랑 DB서버 둘이 연동하는 거 해보려고 하는 것 모레부터는 이제 왓슨 서버까지 넣어서 실제로 하는 방법으로 DB서버 연결까지 할 것 왓스에 회사의 실제 비즈니스들이 들어가 있음 웹서버가 이거 내가 할 일이 아니네?하면 왓스에게 넘김 장부,톰캣 등등 여러가지 왓슨이 백엔드에서 동적 내용들 처리
+
+Admin: 서버 로컬 터미널(SSH)을 통해서만 관리 권한을 행사합니다. (외부 직접 접속 차단)
+
+1. 프로젝트 디렉토리 구조 (Directory Structure)
+! 실습하기 좋게 간소화 버전
+
+ansible-project/
+├── group_vars/
+│   └── all/
+│       └── vault.yml        # [보안] 암호화된 비밀번호 저장소
+├── roles/
+│   ├── common/              # [Role] 패키지 캐시 업데이트 및 기본 유틸
+│   ├── mariadb/             # [Role] DB 설치, 로컬 보안 설정, 데이터 주입
+│   ├── nginx/               # [Role] 웹서버 설치, 8080 포트 개방, PHP 연동
+│   └── webapp/              # [Role] PHP 소스 배포 (DB 연동 페이지)
+├── inventory.ini            # 관리 대상 서버 목록 (IP 주소)
+├── site.yml                 # 전체 플레이북 실행 파일
+└── setup.yml                # (최초 1회용) 디렉토리/파일 자동 생성 스크립트
+
+setup.yml은 밖에다가
+
+!인벤토리 밖에다 빼서 한 대만 하기. 자기 짝꿍 ip주소가 관리대상 !site.yaml가 전체를 다 실행 시킬 것 !setup.yaml으로 디렉토리.파일.yaml파일 생성도 한번에 자동화 시킬 수 있음 디렉토리 하나씩 다 만들 필요가 없음! 이 디렉토리 구조를 만들기 전에 하는 것인데 둘 곳이 없어서 일단 구조에는 이렇게 표시 했지만 밖에 따로 빼면 좋음.
+2. [Step 0] 디렉토리 및 파일 자동 생성 (setup.yml)
+수동 생성을 방지하기 위한 스캐폴딩(Scaffolding) 플레이북입니다.
+
+setup.yml
+
+# 실행: ansible-playbook setup.yml
+- name: 프로젝트 기초 구조 생성
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: 롤(Role) 및 변수 디렉토리 생성
+      file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - group_vars/all
+        - roles/common/tasks
+        - roles/mariadb/tasks
+        - roles/mariadb/templates
+        - roles/nginx/tasks
+        - roles/nginx/templates
+        - roles/webapp/tasks
+        - roles/webapp/templates
+
+    - name: 빈 파일 생성 (이후 내용을 채워넣음)
+      file:
+        path: "{{ item }}"
+        #파일이 아니라 터치라고 함
+        state: touch
+      #루프 건다고 표현
+      loop:
+        - inventory.ini
+        - site.yml
+        #그룹바스는 모두에게 보낸다는 뜻
+        - group_vars/all/vault.yml
+        - roles/common/tasks/main.yml
+        - roles/mariadb/tasks/main.yml
+        - roles/nginx/tasks/main.yml
+        - roles/nginx/templates/default.j2
+        - roles/webapp/tasks/main.yml
+        - roles/webapp/templates/index.php.j2
+
+[실행 명령어] 반드시 아래 명령어로 구조를 먼저 생성하세요.
+
+ansible-playbook setup.yml
+
+3. [Step 1] 비밀번호 암호화 (Ansible Vault)
+보안을 위해 비밀번호는 평문으로 저장하지 않습니다.
+
+'touch.vault.yml' 하고 cat으로 보고 (빈파일 보일 것)
+Vault 파일 : ansible-vault encrypt group_vars/all/vault.yml 하고 cat으로 확인 !이상한 숫자 다섯줄 정도 나옴
+ansible-vault edit group_vars/all/vault.yml 이걸 치면 vi로 연결되게 됨 nano가 아니라
+내용 입력:
+# DB 루트(Superuser) 비밀번호
+db_root_password: "StrongRootPassword!@#" #짝꿍패스워드 12345678
+
+# 로컬 관리자(Admin) 비밀번호
+db_admin_password: "StrongAdminPassword!@#" #1234
+
+# 웹 애플리케이션(Webapp) 전용 비밀번호
+db_web_password: "StrongWebPassword!@#" #12345678
+
+4. [Step 2] 역할(Role)별 상세 구현
+(1) Common Role
+roles/common/tasks/main.yml
+
+# 모든 서버에 공통 적용되는 기초 작업
+- name: APT 캐시 업데이트 (패키지 설치 에러 방지)
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600 #3600초 안에 업데이트했으면 안해도 된다
+
+(2) MariaDB Role (핵심: 로컬 전용 보안 설정)
+외부 접속을 원천 차단하고 오직 localhost 접속만 허용합니다. tasks/main.yml이라고 IAC인프라를 코드로 하기 위해 디렉토리까지 정규화해서 처리해야 하는 것+. 내 맘대로 짓는 게 아니라 tasks라는 디렉토리가 지어주었으면 그 안에 또 tasks를 쓰지 않고 바로 main이 나오는 것을 알려주고 싶었음.(tasks자체가 예약어로 된 디렉토리임 앤서블의 특이점)
+
+roles/mariadb/tasks/main.yml
+
+- name: MariaDB 및 Python 바인딩 설치
+  apt:
+    name:
+      - mariadb-server
+      - python3-pymysql # Ansible이 MySQL을 제어하기 위한 필수 모듈 #python3 깔아야 함
+    state: present
+
+# [중요] 외부 접속 차단 설정
+# 127.0.0.1로 설정하면 랜선(외부 IP)을 통한 접속 요청을 아예 듣지 않습니다.
+# bind-address=127.0.0.1만 허용 된다
+- name: 로컬 접속만 허용 (bind-address = 127.0.0.1)
+  lineinfile:
+    path: /etc/mysql/mariadb.conf.d/50-server.cnf
+    #바인드 어드레스를 찾아서 127.0.0.1로 바꿔라
+    regexp: '^bind-address'
+    #127.0.0.0에서 모두가 볼 수 있게 ~.1로 바꾼 것일 것, 웹서버만 붙게 해야 좋은데 웹서버가 나랑 같이 있음!안되는이유가 이거 때문일 수도 있음
+    line: 'bind-address = 127.0.0.1'
+  notify: restart mariadb
+
+- name: MariaDB 서비스 시작 및 활성화
+  service:
+    name: mariadb
+    state: started
+    enabled: yes
+
+- name: 백업 디렉토리 생성
+  file:
+    path: /var/lib/mysql/backup
+    state: directory
+    owner: mysql
+    group: mysql
+    mode: '0755'
+
+- name: 로컬의 employees.sql 파일 서버로 복사
+  copy:
+    src: ~/dbbackup/employees.sql # 앤서블 실행 PC의 경로
+    dest: /var/lib/mysql/backup/employees.sql
+    owner: mysql
+    group: mysql
+
+# become: yes가 없으면 Root 권한이 없어 DB Import가 실패합니다.
+- name: 데이터베이스 주입 (Import)
+  community.mysql.mysql_db:
+    name: employees
+    state: import
+    target: /var/lib/mysql/backup/employees.sql
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+
+# [보안] 관리자도 오직 로컬(터미널)에서만 접속 가능
+- name: 로컬 관리자(Admin) 계정 생성
+  community.mysql.mysql_user:
+    name: dbadmin
+    password: "{{ db_admin_password }}"
+    priv: '*.*:ALL,GRANT' # 모든 권한 부여
+    host: 'localhost'      # [중요] 외부 접속 불가, 로컬 전용
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+# [보안] 웹앱은 로컬호스트를 통해 DB 접속
+- name: 웹(Web) 계정 생성
+  community.mysql.mysql_user:
+    name: webuser
+    password: "{{ db_web_password }}"
+    priv: 'employees.*:SELECT' # employees DB만 조회 가능 (최소 권한) #셀렉트 외엔 하지만 조회만 가능해
+    host: 'localhost'
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+
+# 핸들러스도 테스크스랑 같은 레벨이기 때문에 안에 있으면 안됨 #밖에서 테스크스 파일 안에 넣는 것은 가능해
+handlers:
+  - name: restart mariadb
+    service:
+      name: mariadb
+      state: restarted
+
+(3) Nginx Role (핵심: 8080 포트 개방)
+웹 서버는 외부에 서비스를 제공해야 하므로 8080 포트를 열어둡니다.
+
+roles/nginx/tasks/main.yml
+
+- name: Nginx 설치
+  apt:
+    name: nginx
+    state: present
+
+# AWS가 아니므로 OS 방화벽(UFW)에서 포트를 열어야 합니다.
+- name: 방화벽(UFW) - 8080 포트 외부 접속 허용
+ #커뮤니티 제너럴은 많이 사용하니까 알아둬야 함
+  community.general.ufw:
+    rule: allow
+    port: '8080'
+    proto: tcp
+
+- name: Nginx 설정 파일 배포
+  template:
+    #j2는 파이썬 jinja
+    src: default.j2
+    dest: /etc/nginx/sites-available/default
+  notify: restart nginx
+
+handlers:
+  - name: restart nginx
+    service:
+      name: nginx
+      state: restarted
+
+roles/nginx/templates/default.j2
+
+server {
+    # [중요] 8080 포트로 들어오는 모든 요청을 수신
+    listen 8080 default_server;
+    server_name _;
+    
+    # 웹 루트 디렉토리 설정
+    # 파일을 시도해봐라, url은 긴 거, uri는 첫 인덱스 짧은 거 안되면 404 띄워라
+    root /var/www/html;
+    index index.php index.html;
+     
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # PHP-FPM 연동 (Local Socket 방식)
+    # Nginx와 PHP는 같은 서버 내에서 소켓 파일로 통신합니다.
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        # Ubuntu 24.04의 기본 PHP 버전(8.3) 소켓 경로 확인 필요
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    }
+}
+
+(4) WebApp Role
+roles/webapp/tasks/main.yml
+
+- name: PHP 및 필수 모듈 설치
+  apt:
+    name:
+      - php-fpm
+      - php-mysql   # MySQL 연동 모듈
+      - php-mbstring
+    state: present
+
+- name: index.php 소스 파일 배포
+  template:
+    src: index.php.j2
+    dest: /var/www/html/index.php
+    owner: www-data # 웹 서버(Nginx)가 읽을 수 있는 권한
+    group: www-data
+    mode: '0644'
+
+roles/webapp/templates/index.php.j2
+
+<?php
+// [보안] DB는 127.0.0.1(localhost)에서만 응답하므로 호스트를 localhost로 지정
+$host = 'localhost'; # 자기자신
+$user = 'webuser'; #불러오는 거
+$pw = '{{ db_web_password }}'; // Vault에서 주입된 비밀번호 1234
+$dbName = 'employees'; #use employees하기 위해 넣는 것
+
+$mysqli = new mysqli($host, $user, $pw, $dbName);
+
+if ($mysqli->connect_errno) {
+    die("<div style='color:red'>DB 접속 실패: " . $mysqli->connect_error . "</div>");
+}
+
+$sql = "SELECT dept_no, dept_name FROM departments LIMIT 10";
+$result = $mysqli->query($sql);
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>사내망 부서 정보 시스템</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        table { border-collapse: collapse; width: 600px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+        th { background-color: #4CAF50; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>🏢 Employees 부서 목록 (Local DB)</h1>
+    <p>이 페이지는 외부(8080)에서 접속 가능하지만, DB는 내부에서만 통신합니다.</p>
+    <table>
+        <thead>
+            <tr><th>부서 코드 (Dept No)</th><th>부서명 (Dept Name)</th></tr>
+        </thead>
+        <tbody>
+            <?php while($row = $result->fetch_assoc()): ?>
+            <tr>
+                <td><?= $row['dept_no'] ?></td>
+                <td><?= $row['dept_name'] ?></td>
+            </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
+</body>
+</html>
+
+table은 헤드 th는 한 칸, tr은 한 줄 만들기
+5. [Step 3] 통합 실행 (site.yml)
+site.yml
+
+- name: 온프레미스 보안 웹/DB 구축
+  hosts: all
+  become: yes # 모든 작업은 Root 권한(sudo)으로 수행
+  vars_files:
+    - group_vars/all/vault.yml
+  roles:
+    - common
+    - mariadb
+    - nginx
+    - webapp
+
+roles에 있는거랑 디렉토리명이랑 같아야 함
+
+실행 명령어:
+
+# Vault 비밀번호 입력을 요청하며 플레이북 실행
+ansible-playbook -i inventory.ini site.yml --ask-vault-pass
+
+요약 및 검증 포인트
+Nginx 접속: 브라우저에서 http://서버IP:8080으로 접속하면 부서 목록이 표로 출력되어야 합니다.
+DB 보안 확인:
+외부 PC(DBeaver 등)에서 서버IP:3306으로 접속 시도 시 **접속 거부(Connection Refused)**가 발생해야 정상입니다. (bind-address가 막고 있음)
+서버 내부 터미널에서 mysql -u dbadmin -p로 접속 시 정상 로그인되어야 합니다.
+데이터: employees 데이터베이스에 데이터가 정상적으로 import 되었는지 페이지의 표 내용을 통해 확인합니다.
+Next Step: Gitea와 Jenkins를 연동한 CI/CD 파이프라인 구축
+
+0070.Git과 Github
+
+0010. Git 이란 사용방법
+
+Git의 정의와 활용 가이드
+Git은 소프트웨어 개발에서 소스 코드의 변경 사항을 추적하고 여러 명의 개발자가 협업할 수 있도록 돕는 **분산 버전 관리 시스템(DVCS)**입니다. 2005년 리눅스 커널의 창시자인 리누스 토발즈가 개발하였으며, 현재 전 세계에서 가장 널리 사용되는 표준 버전 관리 도구입니다.
+
+1. Git의 핵심 개념
+Git을 이해하기 위해서는 파일이 관리되는 세 가지 주요 영역(Workflow)을 알아야 합니다.
+
+Working Directory (작업 디렉토리): 실제 파일이 존재하며 코드를 수정하는 로컬 폴더입니다.
+Staging Area (스테이징 영역): 커밋(저장)하기 전, 변경된 파일들을 선별하여 모아두는 준비 영역입니다.
+Repository (저장소): 스테이징 영역에 있던 파일들을 최종적으로 기록하는 장소입니다. 로컬과 원격(Remote)으로 나뉩니다.
+2. Git의 주요 특징
+분산 관리: 중앙 서버가 마비되어도 개별 개발자의 로컬 저장소에 전체 이력이 남아 있어 복구가 쉽습니다.
+빠른 속도: 대부분의 작업이 로컬에서 이루어지므로 매우 빠릅니다.
+브랜치(Branch) 시스템: 독립된 작업 공간을 생성하여 기능 개발, 버그 수정 등을 안전하게 진행한 뒤 나중에 하나로 합칠 수 있습니다.
+3. Git 기본 사용 방법 (CLI 기준)
+가장 많이 사용되는 핵심 명령어 흐름입니다.
+
+3.1. 초기 설정 및 시작
+# 저장소 생성 (현재 폴더를 Git이 관리하도록 설정)
+git init
+
+# 사용자 정보 설정 (설치 후 최초 1회)
+git config --global user.name "이름"
+git config --global user.email "이메일"
+
+3.2. 저장 및 확인
+# 변경된 파일을 스테이징 영역으로 이동 (add)
+git add 파일명  # 특정 파일만
+git add .      # 모든 변경 파일
+
+# 변경 사항을 저장소에 기록 (commit)
+git commit -m "커밋 메시지 입력"
+
+# 현재 파일 상태 확인
+git status
+
+3.3. 원격 저장소(GitHub 등)와 동기화
+# 원격 저장소 연결
+git remote add origin https://github.com/사용자/저장소.git
+
+# 로컬 데이터를 원격 저장소로 업로드
+git push origin main
+
+# 원격 저장소의 최신 데이터 가져오기
+git pull origin main
+
+4. 브랜치(Branch) 관리: 협업의 핵심
+브랜치는 기존 코드의 흐름을 방해하지 않고 새로운 기능을 추가할 때 사용합니다.
+
+브랜치 생성: git branch 브랜치명
+브랜치 이동: git checkout 브랜치명
+브랜치 합치기: git merge 브랜치명 (주로 메인 브랜치에서 실행)
+5. AWS 환경에서의 Git 활용 및 비용 주의사항
+Git은 AWS의 다양한 서비스와 연동되어 CI/CD(지속적 통합/배포)를 구현하는 데 필수적입니다.
+
+보안 주의 (중요): .gitignore 파일을 작성하여 AWS Access Key, Secret Key, DB 비밀번호 등이 담긴 설정 파일이 GitHub 등 원격 저장소에 업로드되지 않도록 철저히 관리하십시오.
+AWS CodeCommit (유료 전환 유의): AWS에서 제공하는 완전 관리형 소스 제어 서비스입니다.
+무료: 매월 처음 5명의 활성 사용자는 무료입니다.
+과금: 5명을 초과하면 사용자당 월 $1.00의 비용이 발생하며, 무료 제공량(저장 공간 50GB, 요청 10,000회) 초과 시 추가 요금이 청구됩니다.
+Next Step: Git 브랜치 전략(Git Flow) 및 충돌 해결 방법
+
+본 내용은 강의 교재 형식을 준수하여 작성되었습니다. 깃허브 마크다운 포맷을 지원하며, Git의 기본 개념부터 실무 명령어, AWS 사용 시 주의사항을 포함하고 있습니다.
+
+Git 정의 | 작업 흐름 | 주요 명령어 | 보안/과금 주의사항
+
+
+[ ]
+
+코딩을 시작하거나 AI로 코드를 생성하세요.
+0020.Github란
+
+020. Git 설치하기
+
+Git 설치 및 초기 설정 가이드
+Git은 소스 코드의 변경 이력을 관리하는 핵심 도구입니다. 운영체제별 설치 방법과 설치 후 필수적으로 진행해야 하는 초기 설정 과정을 정리합니다.
+
+1. 운영체제별 Git 설치 방법
+1.1. Windows (윈도우)
+공식 사이트 접속: git-scm.com에 접속하여 설치 파일을 다운로드합니다.
+설치 프로세스: 대부분 'Next'를 눌러 기본값으로 진행해도 무방하지만, 다음 설정은 확인하는 것이 좋습니다.
+Editor: Git에서 사용할 기본 에디터를 선택합니다 (Vim 또는 VS Code 권장).
+Path: 'Git from the command line and also from 3rd-party software'를 선택해야 터미널에서 git 명령어를 사용할 수 있습니다.
+설치 확인: 명령 프롬프트(CMD) 또는 PowerShell에서 아래 명령어를 입력합니다.
+git --version
+
+1.2. macOS (맥)
+Homebrew 이용 (권장): 터미널을 열고 아래 명령어를 입력합니다.
+brew install git
+
+Xcode Command Line Tools: Homebrew가 없다면 터미널에 git을 입력했을 때 나타나는 설치 팝업을 통해 설치할 수 있습니다.
+1.3. Linux (리눅스 - Ubuntu/Debian 기준)
+패키지 업데이트 및 설치:
+sudo apt update
+sudo apt install git
+
+2. Git 초기 설정 (First-Time Setup)
+Git을 설치한 직후에는 누가 수정을 했는지 기록하기 위해 사용자 이름과 이메일을 등록해야 합니다.
+
+사용자 정보 등록:
+git config --global user.name "Your Name"
+git config --global user.email "your_email@example.com"
+
+설정 확인:
+git config --list
+
+내 저장소 만들기
+cd ~              # 홈 디렉토리로 이동
+mkdir .git  # 새 폴더 생성
+cd .git     # 폴더 진입
+git init          # Git 저장소 시작 (이 시점부터 Git 관리 영역이 됨)
+
+git innit 해야 이력관리가 됨
+
+3. 주요 Git 영역과 작업 흐름 (Workflow)
+Git은 파일을 관리할 때 세 가지 영역을 사용합니다. 이 구조를 이해하는 것이 Git 활용의 핵심입니다.
+
+Working Directory: 실제로 코드를 수정하고 있는 내 컴퓨터의 폴더입니다.
+Staging Area (Index): 저장을 위해 선택된 파일들이 대기하는 장소입니다 (git add).
+Local Repository (.git): 변경 사항이 최종적으로 기록되는 저장소입니다 (git commit).
+4. 클라우드 연동 및 비용/보안 가이드
+설치 후 GitHub나 AWS 환경과 연동할 때 고려해야 할 사항입니다.
+
+4.1. 보안 (Security)
+SSH Key 활용: ID/PW 방식보다 보안성이 높은 SSH 키를 생성하여 GitHub/AWS에 등록하는 것을 권장합니다.
+AWS Credentials: AWS CLI 환경에서 Git을 사용할 때, ~/.aws/credentials 파일이 노출되지 않도록 권한 관리(chmod 600)에 유의하십시오.
+4.2. AWS 관련 서비스 (유료 전환 유의)
+AWS CodeCommit: Git 기반의 호스팅 서비스입니다.
+무료: 매월 처음 5명의 활성 사용자는 무료입니다.
+과금: 5명을 초과하면 사용자당 월 $1.00의 요금이 부과됩니다. 또한, 무료 제공량(저장 공간 50GB, Git 요청 10,000회)을 초과할 경우 추가 비용이 발생합니다.
+Next Step: Git 기본 명령어(Add, Commit, Push) 실습
+
+저장소 생성 | 파일 상태 확인 | 변경 이력 되돌리기 | 원격 저장소 연결
+
+본 내용은 강의 교재 형식을 준수하여 작성되었습니다. 깃허브 마크다운 포맷을 지원하며, 설치 이후 필수 단계와 보안/과금 주의사항을 포함하고 있습니다.
+
+
+[ ]
+
+코딩을 시작하거나 AI로 코드를 생성하세요.
+0012. Git 명령어 모음
+
+Git 주요 명령어 가이드
+Git은 소스 코드의 이력을 관리하는 분산 버전 관리 시스템입니다. 효율적인 프로젝트 관리를 위해 가장 빈번하게 사용되는 명령어들을 기능별로 분류하여 정리하였습니다.
+
+1. 저장소 생성 및 설정
+새로운 프로젝트를 시작하거나 기존 저장소를 복제할 때 사용하는 명령어입니다.
+
+명령어	설명	비고
+git init	현재 디렉토리를 로컬 Git 저장소로 초기화	.git 폴더 생성
+git clone [url]	원격 저장소의 내용을 로컬로 복제	전체 이력 포함
+git config --global user.name "[이름]"	커밋에 사용될 사용자 이름 설정	초기 1회 설정
+git config --global user.email "[이메일]"	커밋에 사용될 사용자 이메일 설정	초기 1회 설정
+2. 변경 사항 관리 (Working Directory -> Staging Area -> Repository)
+파일의 수정 내용을 기록하고 저장소에 반영하는 핵심 흐름입니다.
+
+명령어	설명	관련 영역
+git status	파일의 상태(추적 여부, 수정 여부 등)를 확인	-
+git add [파일명]	특정 파일을 스테이징 영역(Staging Area)에 추가	Index 업데이트
+git add .	변경된 모든 파일을 스테이징 영역에 추가	-
+git commit -m "[메시지]"	스테이징된 변경 사항을 로컬 저장소에 기록	Snapshot 생성
+git commit --amend	직전 커밋 메시지를 수정하거나 파일을 추가	커밋 이력 변경
+3. 브랜치(Branch) 및 병합(Merge)
+독립적인 작업 공간을 만들고 이를 합치는 과정에서 사용됩니다.
+
+명령어	설명	비고
+git branch	로컬 브랜치 목록 확인	-r 옵션 시 원격 포함
+git branch [이름]	새로운 브랜치 생성	생성만 수행
+git checkout [이름]	특정 브랜치로 전환	-
+git switch [이름]	특정 브랜치로 전환 (최신 권장 명령어)	-
+git checkout -b [이름]	브랜치 생성과 동시에 전환	-
+git merge [대상]	현재 브랜치에 대상 브랜치의 변경 사항을 병합	-
+git branch -d [이름]	사용이 끝난 로컬 브랜치 삭제	-
+4. 원격 저장소 동기화 (Remote)
+로컬 작업물을 서버(GitHub, AWS CodeCommit 등)와 주고받는 명령어입니다.
+
+명령어	설명	비고
+git remote add origin [url]	로컬 저장소와 원격 저장소를 연결	AWS CodeCommit 연결 시 사용
+git fetch	원격 저장소의 변경 사항을 로컬로 가져오기만 함	병합 안 함
+git pull	원격 저장소의 변경 사항을 가져와 현재 브랜치와 병합	fetch + merge
+git push [별칭] [브랜치]	로컬 커밋을 원격 저장소에 업로드	보통 origin master
+주의 (AWS 요금 관련): AWS CodeCommit은 활성 사용자당 일정 수의 무료 요청을 제공하지만, 대규모 데이터 전송이나 많은 사용자가 접근할 경우 추가 과금이 발생할 수 있습니다. 5명을 초과하는 활성 사용자가 있을 경우 사용자당 추가 요금이 발생하므로 팀 규모에 따라 비용을 확인해야 합니다.
+
+5. 이력 확인 및 취소
+과거 기록을 조회하거나 실수를 되돌릴 때 사용합니다.
+
+명령어	설명	비고
+git log	현재 브랜치의 커밋 히스토리를 조회	q로 종료
+git diff	스테이징 전의 변경 내용 차이 확인	-
+git reset --hard [커밋ID]	특정 커밋 시점으로 완전히 되돌림	주의: 이후 작업물 삭제됨
+git revert [커밋ID]	기존 커밋의 변경 사항을 취소하는 새로운 커밋 생성	이력 보존 방식
+git stash	아직 커밋하지 않은 변경사항을 임시 저장소에 보관	작업 도중 브랜치 전환 시 유용
+git stash pop	임시 저장된 변경사항을 다시 꺼내옴	-
+6. 요약 워크플로우
+git clone 또는 git init: 저장소 준비
+git add: 변경 파일 선택
+git commit: 로컬 저장소 저장
+git push: 원격 저장소 반영
+Next Step: Git Branch 전략(Git Flow)
+
+이 가이드는 마크다운 형식을 준수하여 GitHub 프로젝트의 README.md 또는 Wiki 탭에 바로 복사하여 사용할 수 있습니다.
+AWS CodeCommit 사용 시 IAM 사용자 권한 및 자격 증명 헬퍼(Credential Helper) 설정이 선행되어야 함을 유의하십시오.
