@@ -1,3 +1,5 @@
+# PC15 JinieFerry Log 2026.01.22.thu
+
 1) 인터페이스 이름 / 현재 IP / 게이트웨이 확인  
 1-1. 인터페이스 이름 확인
 ```
@@ -108,7 +110,8 @@ ping -c 3 google.com
 
 =>연결 성공!
 <img width="946" height="1040" alt="image" src="https://github.com/user-attachments/assets/24d0cfa9-ef81-4d71-b024-5ee835e0a0d5" />
-
+=>호스트키 수락 및 저장
+<img width="450" height="486" alt="image" src="https://github.com/user-attachments/assets/57ba31fd-5dde-4868-8ffd-5d2d64b7ee53" />
 
 
 pc제어판에서 네트워크 설정 (버추얼박스)그대로 맞춰주기
