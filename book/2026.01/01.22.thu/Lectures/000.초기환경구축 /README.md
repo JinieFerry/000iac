@@ -149,6 +149,32 @@ vm2
 vm3
 <img width="569" height="401" alt="image" src="https://github.com/user-attachments/assets/b8a6faa0-6834-4a5a-b44a-f2a79f2af65a" />
 
+####vm1,2,3설정
+1) master01을 복제해서 만들었으므로 hostname을 vm1,vm2,vm3으로 변경해준다  
+```
+1) hostname 변경
+sudo hostnamectl set-hostname vm1 #vm1자리에 변경할 vm2,vm3 등 원하는 호스트네임
+```
+
+2)netPlan각각 252,253,254로 변경
+<img width="906" height="875" alt="image" src="https://github.com/user-attachments/assets/7f1fb6a9-edc6-42ac-8ee8-8bd28a87785f" />
+```
+#netplan IP 변경
+sudo vi /etc/netplan/50-cloud-init.yaml
+```
+```
+#/etc/hosts 수정
+sudo vi /etc/hosts
+```
+이렇게 수정
+127.0.0.1   localhost
+192.168.115.252 vm2
+
+```
+# 재부팅
+sudo reboot
+```
+
 
 
 
