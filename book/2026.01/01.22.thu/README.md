@@ -1,4 +1,4 @@
-1) 인터페이스 이름 / 현재 IP / 게이트웨이 확인
+1) 인터페이스 이름 / 현재 IP / 게이트웨이 확인  
 1-1. 인터페이스 이름 확인
 ```
 master@vmmaster15:~$ ip -br link
@@ -17,7 +17,7 @@ master@vmmaster15:~$ ip route | grep default
 default via 192.168.10.1 dev enp0s3 proto dhcp src 192.168.10.187 metric 100
 ```
 
-2) Netplan 파일 확인 후 편집
+2) Netplan 파일 확인 후 편집  
 2-1. 파일 목록
 ```
 ls /etc/netplan/
