@@ -174,7 +174,18 @@ sudo vi /etc/hosts
 # 재부팅
 sudo reboot
 ```
+####vmmaster01 /vm1,vm2,vm3 성공
+#####vmmaster01
+<img width="1282" height="875" alt="image" src="https://github.com/user-attachments/assets/a0df0ee4-c01e-4fbf-8e36-0d814c5454ce" />
 
+#####vm1
+<img width="1282" height="875" alt="image" src="https://github.com/user-attachments/assets/f70088b0-d5c6-4b3c-a3cf-17447cce0bf2" />
+
+#####vm2
+<img width="1282" height="875" alt="image" src="https://github.com/user-attachments/assets/13088f69-0e70-442f-9763-b9ef13eee1e7" />
+
+#####vm3
+<img width="1282" height="875" alt="image" src="https://github.com/user-attachments/assets/4061960b-483f-4440-b564-89a79c12d7f4" />
 
 
 
