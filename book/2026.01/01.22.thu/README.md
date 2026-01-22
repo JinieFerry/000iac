@@ -67,7 +67,17 @@ ESC
 
 3-2/ 그 다음 적용:
 ```
-sudo netplan apply
+master@vmmaster15:~$ sudo netplan apply
+
+Socket error Event: 32 Error: 10053.
+Connection closing...Socket close.
+
+Connection closed by foreign host.
+
+Disconnected from remote host(EC2-2) at 10:49:42.
+
+Type `help' to learn how to use Xshell prompt.
+
 ```
 
 4.적용확인
