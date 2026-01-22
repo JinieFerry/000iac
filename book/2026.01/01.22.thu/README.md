@@ -104,7 +104,12 @@ ping -c 3 google.com
 
 
 5.pc서버도 바꿔주기
-<img width="734" height="649" alt="image" src="https://github.com/user-attachments/assets/98a68758-b9c6-4970-8358-9f9fa1e6e745" />
+<img width="734" height="649" alt="image" src="https://github.com/user-attachments/assets/05a3ba67-2d60-4755-88ba-da9dd15e4158" />
+
+=>연결 성공!
+<img width="946" height="1040" alt="image" src="https://github.com/user-attachments/assets/24d0cfa9-ef81-4d71-b024-5ee835e0a0d5" />
+
+
 
 pc제어판에서 네트워크 설정 (버추얼박스)그대로 맞춰주기
 ![Uploading image.png…]()
