@@ -1,134 +1,20 @@
-# PC15 JinieFerry Log 2026.01.22.thu
+Jinie.ver  
 
-1) 인터페이스 이름 / 현재 IP / 게이트웨이 확인  
-1-1. 인터페이스 이름 확인
-```
-master@vmmaster15:~$ ip -br link
-lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
-enp0s3           UP             08:00:27:0f:34:47 <BROADCAST,MULTICAST,UP,LOWER_UP>
-```
-1-2. 현재 IP 확인
-```
-master@vmmaster15:~$ ip -br addr
-lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp0s3           UP             192.168.10.187/16 metric 100 fe80::a00:27ff:fe0f:3447/64
-```
-1-3. 게이트웨이(기본 라우트) 확인
-```
-master@vmmaster15:~$ ip route | grep default
-default via 192.168.10.1 dev enp0s3 proto dhcp src 192.168.10.187 metric 100
-```
+192.168.1+PcNum(15).254
 
-2) Netplan 파일 확인 후 편집  
-2-1. 파일 목록
-```
-ls /etc/netplan/
-```
+PC:    192.168.115.254 # pc:254 vm:251  
+SNM:   255.255.0.0  
+GW:    192.168.10.1  
+DNS1:  168.126.63.1  
+DNS2:  8.8.8.8  
 
-2-2. 편집할 파일 선택 
-둘 중에 하나 01-netcfg.yaml, 50-cloud-init.yaml
-```
-sudo vi /etc/netplan/50-cloud-init.yaml
-```
-수정 전 그대로 열면 기본 상태
-```
-network:
-  version: 2
-  ethernets:
-    enp0s3:
-      dhcp4: true
-```
+서버VM  
+192.168.115.251 #마스터  
+192.168.115.252  
+192.168.115.253  
+192.168.115.254  
+# 251 - vm1 아이피랑 호스트네임 넘버 맞춤  
 
-수정 후
-```
-network:
-  version: 2
-  renderer: networkd
-  ethernets:
-    enp0s3:
-      dhcp4: no
-      addresses:
-        - 192.168.115.251/16 #192.168.1+자기PC번호(15)=115
-      routes:
-        - to: default
-          via: 192.168.10.1
-      nameservers:
-        addresses:
-          - 168.126.63.1
-          - 8.8.8.8
-```
-
-
-3) 저장 후 적용
-
-3-1. vi에서:
-
-ESC
-:wq
-
-
-3-2/ 그 다음 적용:
-```
-master@vmmaster15:~$ sudo netplan apply
-
-Socket error Event: 32 Error: 10053.
-Connection closing...Socket close.
-
-Connection closed by foreign host.
-
-Disconnected from remote host(EC2-2) at 10:49:42.
-
-Type `help' to learn how to use Xshell prompt.
-
-```
-
-4.적용확인
-```
-master@vmmaster15:~$ ip -br addr
-lo               UNKNOWN        127.0.0.1/8 ::1/128 
-enp0s3           UP             192.168.10.187/16 fe80::a00:27ff:fe0f:3447/64
-```
-```
-master@vmmaster15:~$ ip route | grep default
-default via 192.168.10.1 dev enp0s3 proto static
-```
-```
-# IP 주소 확인
-ip addr show enp0s3
-
-# 게이트웨이 설정 확인
-ip route
-
-# 외부 네트워크 연결 테스트 (DNS 작동 확인)
-ping -c 3 google.com
-```
-<img width="947" height="512" alt="image" src="https://github.com/user-attachments/assets/ca57c438-e428-447b-a157-7ab08d721100" />
-
-
-5.pc서버도 바꿔주기
-<img width="734" height="649" alt="image" src="https://github.com/user-attachments/assets/05a3ba67-2d60-4755-88ba-da9dd15e4158" />
-
-=>연결 성공!
-<img width="946" height="1040" alt="image" src="https://github.com/user-attachments/assets/24d0cfa9-ef81-4d71-b024-5ee835e0a0d5" />
-=>호스트키 수락 및 저장
-<img width="450" height="486" alt="image" src="https://github.com/user-attachments/assets/57ba31fd-5dde-4868-8ffd-5d2d64b7ee53" />
-
-
-pc제어판에서 네트워크 설정 (버추얼박스)그대로 맞춰주기
-![Uploading image.png…]()
-
-![Uploading image.png…]()
-
-<img width="421" height="533" alt="image" src="https://github.com/user-attachments/assets/ae91ae20-b657-43c2-8be2-b4828129a6d8" />
-
-<img width="465" height="518" alt="image" src="https://github.com/user-attachments/assets/c86851e8-11dd-4cd4-8355-e8455b93eef4" />
-
-6. VM에직접 열기
-
-```
-master01 login: master
-Password: (1234)
-```
-
-<img width="1080" height="875" alt="image" src="https://github.com/user-attachments/assets/19d6d384-4bcf-4f9d-b72d-928ead3302c3" />
-
+hostname:master01  
+host pwd : 1234  
+root pwd : 1234  
