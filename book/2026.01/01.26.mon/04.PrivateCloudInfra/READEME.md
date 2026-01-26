@@ -88,13 +88,21 @@ docker login -u ferryjin
 #두번째 토큰 사용
 
 #  이미지 업로드
-docker push [본인_도커허브_ID]/my-web-app:v1
+docker push ferryjin/my-web-app:v1
 
 #  로컬 이미지 삭제 (테스트를 위해)
-docker rmi [본인_도커허브_ID]/my-web-app:v1
+docker tag my-web-app:v1 ferryjin/my-web-app:v1
 
 #  도커 허브에서 이미지 다운로드
-docker pull [본인_도커허브_ID]/my-web-app:v1
+docker pull ferryjin/my-web-app:v1
 ```
 
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/989a6f05-439f-42cc-b459-847e0bd13e2f" />
+
+9.docker인프라로 들어각기
+```
+docker exec -it web01 /bin/bash
+```
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/96695a5d-a152-4dc9-97e4-c676bfa09666" />
+
+
