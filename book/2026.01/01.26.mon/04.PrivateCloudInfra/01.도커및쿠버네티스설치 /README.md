@@ -71,6 +71,10 @@ sudo shutdown -h now
 # 시스템 패키지 업데이트
 sudo apt update && sudo apt upgrade -y
 
+sudo systemctl disable gitlab-runsvdir
+
+
+
 # Swap 메모리 비활성화 (k8s 스케줄러가 리소스를 정확히 계산하기 위해 필수)
 sudo swapoff -a
 sudo sed -i '/swap/s/^/#/' /etc/fstab # 재부팅 시에도 적용되도록 설정
