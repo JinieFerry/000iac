@@ -45,11 +45,18 @@ cat /etc/hostname
 ### 호스트네임으로 간단하게 DNS 접속 가능하게 설정
 + 아이피를 바로 hosts에서 찾을 수 있음
 + ssh master@vm1같은 형식으로 간단하게 DNS 접속 가능
++ /etc/host는 자기 이름 짓는 파일<->/etc/hosts DNS 서버 이름 짓는 파일
 ```
+
+
 sudo vi /etc/hosts
-# 192.168.115.251 localhost  <- vmmaster01에서는 제외
-# 192.168.115.1 vm 1 <- vm1에서는 제외
-# 192.168.115.2 vm 2 <- vm2에서는 제외
+
+#vm1에서
+127.0.0.1 localhost 
+192.168.115.251 vmmaster1
+192.168.115.2 vm2
+
+#자기자신이 localhost : vm1에서는 192.168.115.1이 localhost
 
 #확인
 cat /etc/hosts
