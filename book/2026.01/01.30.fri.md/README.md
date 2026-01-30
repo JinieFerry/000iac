@@ -55,7 +55,7 @@ sudo vi /etc/hosts
 cat /etc/hosts
 ```
 목적: 아래와 같은 형식으로 접속 가능하도록     
-ssh master@vm1     
-ssh master@vm2      
-ping vmmaster1      
+> ssh master@vm1     
+> ssh master@vm2      
+> ping vmmaster1      
 
